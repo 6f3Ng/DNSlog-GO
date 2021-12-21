@@ -4,14 +4,17 @@ import (
 	"DnsLog/Core"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/net/dns/dnsmessage"
 	"log"
 	"net"
 	"os"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 var DnsData []DnsInfo
@@ -60,22 +63,50 @@ func serverDNS(addr *net.UDPAddr, conn *net.UDPConn, msg dnsmessage.Message) {
 		queryType    = question.Type
 		queryName, _ = dnsmessage.NewName(queryNameStr)
 	)
+	var resIp [4]byte
+	//fmt.Println(queryNameStr[:len(queryNameStr)-1], " ", Core.Config.Dns.Xip)
 	//域名过滤，避免网络扫描
-	if strings.Contains(queryNameStr, Core.Config.Dns.Domain) {
+	if strings.HasSuffix(queryNameStr[:len(queryNameStr)-1], Core.Config.Dns.Dnslog) {
 		D.Set(DnsInfo{
 			Subdomain: queryNameStr[:len(queryNameStr)-1],
 			Ipaddress: addr.IP.String(),
 			Time:      time.Now().Unix(),
 		})
+		resIp = [4]byte{127, 0, 0, 1}
+	} else if strings.HasSuffix(queryNameStr[:len(queryNameStr)-1], Core.Config.Dns.Xip) {
+		D.Set(DnsInfo{
+			Subdomain: queryNameStr[:len(queryNameStr)-1],
+			Ipaddress: addr.IP.String(),
+			Time:      time.Now().Unix(),
+		})
+		reg := regexp.MustCompile(`((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})(\.((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})){3}`)
+		if reg == nil {
+			return
+		}
+		resIpStr := reg.FindString(queryNameStr)
+		//fmt.Println(resIpStr)
+		if resIpStr == "" {
+			resIp = [4]byte{127, 0, 0, 1}
+		} else {
+			resIpStrArray := strings.Split(resIpStr, ".")
+			resIpNum0, _ := strconv.Atoi(resIpStrArray[0])
+			resIpNum1, _ := strconv.Atoi(resIpStrArray[1])
+			resIpNum2, _ := strconv.Atoi(resIpStrArray[2])
+			resIpNum3, _ := strconv.Atoi(resIpStrArray[3])
+			resIp[0] = byte(resIpNum0)
+			resIp[1] = byte(resIpNum1)
+			resIp[2] = byte(resIpNum2)
+			resIp[3] = byte(resIpNum3)
+		}
 	} else {
 		return
 	}
 	var resource dnsmessage.Resource
 	switch queryType {
 	case dnsmessage.TypeA:
-		resource = NewAResource(queryName, [4]byte{127, 0, 0, 1})
+		resource = NewAResource(queryName, resIp)
 	default:
-		//fmt.Printf("not support dns queryType: [%s] \n", queryTypeStr)
+		//fmt.Printf("not support dns queryType: [%s] \n", queryType.String())
 		return
 	}
 
@@ -102,7 +133,7 @@ func NewAResource(query dnsmessage.Name, a [4]byte) dnsmessage.Resource {
 		Header: dnsmessage.ResourceHeader{
 			Name:  query,
 			Class: dnsmessage.ClassINET,
-			TTL:   600,
+			TTL:   120,
 		},
 		Body: &dnsmessage.AResource{
 			A: a,

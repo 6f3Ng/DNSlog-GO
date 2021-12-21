@@ -6,7 +6,9 @@ var Config = struct {
 		Token          string
 		ConsoleDisable bool
 	}
-	Dns struct{
+	Dns struct {
 		Domain string
+		Xip    string
+		Dnslog string
 	}
 }{}
