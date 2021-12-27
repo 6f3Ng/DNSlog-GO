@@ -9,7 +9,6 @@ import (
 	"os"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,7 +28,7 @@ type DnsInfo struct {
 
 var D DnsInfo
 
-//监听dns端口
+// 监听dns端口
 func ListingDnsServer() {
 	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
 		log.Fatal("Please run as root")
@@ -58,14 +57,14 @@ func serverDNS(addr *net.UDPAddr, conn *net.UDPConn, msg dnsmessage.Message) {
 	}
 	question := msg.Questions[0]
 	var (
-		//queryTypeStr = question.Type.String()
+		// queryTypeStr = question.Type.String()
 		queryNameStr = question.Name.String()
 		queryType    = question.Type
 		queryName, _ = dnsmessage.NewName(queryNameStr)
 	)
 	var resIp [4]byte
-	//fmt.Println(queryNameStr[:len(queryNameStr)-1], " ", Core.Config.Dns.Xip)
-	//域名过滤，避免网络扫描
+	// fmt.Println(queryNameStr[:len(queryNameStr)-1], " ", Core.Config.Dns.Xip)
+	// 域名过滤，避免网络扫描
 	if strings.HasSuffix(queryNameStr[:len(queryNameStr)-1], Core.Config.Dns.Dnslog) {
 		D.Set(DnsInfo{
 			Subdomain: queryNameStr[:len(queryNameStr)-1],
@@ -74,11 +73,12 @@ func serverDNS(addr *net.UDPAddr, conn *net.UDPConn, msg dnsmessage.Message) {
 		})
 		resIp = [4]byte{127, 0, 0, 1}
 	} else if strings.HasSuffix(queryNameStr[:len(queryNameStr)-1], Core.Config.Dns.Xip) {
-		D.Set(DnsInfo{
-			Subdomain: queryNameStr[:len(queryNameStr)-1],
-			Ipaddress: addr.IP.String(),
-			Time:      time.Now().Unix(),
-		})
+		// 去掉页面回显dns记录
+		// D.Set(DnsInfo{
+		// 	Subdomain: queryNameStr[:len(queryNameStr)-1],
+		// 	Ipaddress: addr.IP.String(),
+		// 	Time:      time.Now().Unix(),
+		// })
 		reg := regexp.MustCompile(`((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})(\.((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})){3}`)
 		if reg == nil {
 			return
@@ -88,15 +88,22 @@ func serverDNS(addr *net.UDPAddr, conn *net.UDPConn, msg dnsmessage.Message) {
 		if resIpStr == "" {
 			resIp = [4]byte{127, 0, 0, 1}
 		} else {
-			resIpStrArray := strings.Split(resIpStr, ".")
-			resIpNum0, _ := strconv.Atoi(resIpStrArray[0])
-			resIpNum1, _ := strconv.Atoi(resIpStrArray[1])
-			resIpNum2, _ := strconv.Atoi(resIpStrArray[2])
-			resIpNum3, _ := strconv.Atoi(resIpStrArray[3])
-			resIp[0] = byte(resIpNum0)
-			resIp[1] = byte(resIpNum1)
-			resIp[2] = byte(resIpNum2)
-			resIp[3] = byte(resIpNum3)
+			// ip转换 string -> byte
+			// resIpStrArray := strings.Split(resIpStr, ".")
+			// resIpNum0, _ := strconv.Atoi(resIpStrArray[0])
+			// resIpNum1, _ := strconv.Atoi(resIpStrArray[1])
+			// resIpNum2, _ := strconv.Atoi(resIpStrArray[2])
+			// resIpNum3, _ := strconv.Atoi(resIpStrArray[3])
+			// resIp[0] = byte(resIpNum0)
+			// resIp[1] = byte(resIpNum1)
+			// resIp[2] = byte(resIpNum2)
+			// resIp[3] = byte(resIpNum3)
+			ip := net.ParseIP(resIpStr)
+			ip4 := net.IP.To4(ip)
+			resIp = [4]byte{ip4[0], ip4[1], ip4[2], ip4[3]}
+			// for i := 0; i < len(ip4); i++ {
+			// 	resIp[i] = ip4[i]
+			// }
 		}
 	} else {
 		return
@@ -106,7 +113,7 @@ func serverDNS(addr *net.UDPAddr, conn *net.UDPConn, msg dnsmessage.Message) {
 	case dnsmessage.TypeA:
 		resource = NewAResource(queryName, resIp)
 	default:
-		//fmt.Printf("not support dns queryType: [%s] \n", queryType.String())
+		// fmt.Printf("not support dns queryType: [%s] \n", queryType.String())
 		return
 	}
 

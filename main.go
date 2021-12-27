@@ -4,10 +4,9 @@ import (
 	"DnsLog/Core"
 	"DnsLog/Dns"
 	"DnsLog/Http"
+
 	"gopkg.in/gcfg.v1"
 )
-
-
 
 func main() {
 	var _ = gcfg.ReadFileInto(&Core.Config, "./config.ini")

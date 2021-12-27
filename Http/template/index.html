@@ -30,7 +30,7 @@
                 <th width="25%">Created Time</th>
             </tr>
             <td v-if="DnsData == ''" colspan="3" align="center">No Data</td>
-            <tr v-for="item in DnsData">
+            <tr v-for="item in DnsData" v-if="('.'+item.Subdomain).substring(('.'+item.Subdomain).length - document.getElementById('myDomain').innerHTML.length - 1) == '.' + document.getElementById('myDomain').innerHTML">
                 <td>{{ item.Subdomain }}</td>
                 <td>{{ item.Ipaddress }}</td>
                 <td>{{ item.Time }}</td>
@@ -94,18 +94,18 @@
                     res => {
                         if (res['data']['HTTPStatusCode'] == 200) {
                             if (res['data']['Msg'] != 'null') {
-                                this.DnsData = JSON.parse(res['data']['Msg']).reverse()
+                                this.DnsData = JSON.parse(res['data']['Msg']).reverse();
                                 for (var i = 0; i < this.DnsData.length; i++) {
                                     this.DnsData[i].Time = formatTimeToStr(this.DnsData[i].Time)
                                 }
                             } else {
-                                this.DnsData = ""
+                                this.DnsData = "";
                             }
                         }
                         if (res['data']['HTTPStatusCode'] == 403) {
                             alert("token错误");
                             localStorage.clear();
-                            location.reload()
+                            location.reload();
                         }
                     }
                 )
@@ -125,6 +125,7 @@
                     randStr += chars.charAt(Math.floor(Math.random() * chars.length));
                 }
                 let randDomain = randStr + "." + this.domain;
+                document.getElementById("myDomain").innerHTML = randDomain;
                 var domUrl = document.createElement("input");
                 domUrl.value = randDomain;
                 domUrl.id = "creatDom";
