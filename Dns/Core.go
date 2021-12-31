@@ -16,7 +16,7 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
-var DnsData []DnsInfo
+var DnsData map[string][]DnsInfo
 
 var rw sync.RWMutex
 
@@ -28,7 +28,7 @@ type DnsInfo struct {
 
 var D DnsInfo
 
-// 监听dns端口
+// ListingDnsServer 监听dns端口
 func ListingDnsServer() {
 	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
 		log.Fatal("Please run as root")
@@ -61,29 +61,36 @@ func serverDNS(addr *net.UDPAddr, conn *net.UDPConn, msg dnsmessage.Message) {
 		queryNameStr = question.Name.String()
 		queryType    = question.Type
 		queryName, _ = dnsmessage.NewName(queryNameStr)
+		resource     dnsmessage.Resource
 	)
 	var resIp [4]byte
 	// fmt.Println(queryNameStr[:len(queryNameStr)-1], " ", Core.Config.Dns.Xip)
 	// 域名过滤，避免网络扫描
 	if strings.HasSuffix(queryNameStr[:len(queryNameStr)-1], Core.Config.Dns.Dnslog) {
-		D.Set(DnsInfo{
-			Subdomain: queryNameStr[:len(queryNameStr)-1],
-			Ipaddress: addr.IP.String(),
-			Time:      time.Now().Unix(),
-		})
+		queryDoamin := strings.Replace(queryNameStr, fmt.Sprintf(".%s.", Core.Config.Dns.Dnslog), "", 1)
+		token := strings.Split(queryDoamin, ".")[len(queryDoamin)-1]
+		if verifyToken(token) {
+			D.Set(token, DnsInfo{
+				Subdomain: queryNameStr[:len(queryNameStr)-1],
+				Ipaddress: addr.IP.String(),
+				Time:      time.Now().Unix(),
+			})
+		} else {
+			D.Set("other", DnsInfo{
+				Subdomain: queryNameStr[:len(queryNameStr)-1],
+				Ipaddress: addr.IP.String(),
+				Time:      time.Now().Unix(),
+			})
+		}
 		resIp = [4]byte{127, 0, 0, 1}
 	} else if strings.HasSuffix(queryNameStr[:len(queryNameStr)-1], Core.Config.Dns.Xip) {
-		// 去掉页面回显dns记录
-		// D.Set(DnsInfo{
-		// 	Subdomain: queryNameStr[:len(queryNameStr)-1],
-		// 	Ipaddress: addr.IP.String(),
-		// 	Time:      time.Now().Unix(),
-		// })
+		// xip解析
+		queryDoamin := strings.Replace(queryNameStr, fmt.Sprintf(".%s.", Core.Config.Dns.Dnslog), "", 1)
 		reg := regexp.MustCompile(`((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})(\.((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})){3}`)
 		if reg == nil {
 			return
 		}
-		resIpStr := reg.FindString(queryNameStr)
+		resIpStr := reg.FindString(queryDoamin)
 		//fmt.Println(resIpStr)
 		if resIpStr == "" {
 			resIp = [4]byte{127, 0, 0, 1}
@@ -108,15 +115,12 @@ func serverDNS(addr *net.UDPAddr, conn *net.UDPConn, msg dnsmessage.Message) {
 	} else {
 		return
 	}
-	var resource dnsmessage.Resource
 	switch queryType {
 	case dnsmessage.TypeA:
 		resource = NewAResource(queryName, resIp)
 	default:
-		// fmt.Printf("not support dns queryType: [%s] \n", queryType.String())
-		return
+		resource = NewAResource(queryName, resIp)
 	}
-
 	// send response
 	msg.Response = true
 	msg.Answers = append(msg.Answers, resource)
@@ -140,7 +144,7 @@ func NewAResource(query dnsmessage.Name, a [4]byte) dnsmessage.Resource {
 		Header: dnsmessage.ResourceHeader{
 			Name:  query,
 			Class: dnsmessage.ClassINET,
-			TTL:   120,
+			TTL:   0,
 		},
 		Body: &dnsmessage.AResource{
 			A: a,
@@ -148,19 +152,41 @@ func NewAResource(query dnsmessage.Name, a [4]byte) dnsmessage.Resource {
 	}
 }
 
-func (d *DnsInfo) Set(data DnsInfo) {
+func (d *DnsInfo) Set(token string, data DnsInfo) {
 	rw.Lock()
-	DnsData = append(DnsData, data)
+	if DnsData[token] == nil {
+		DnsData[token] = []DnsInfo{data}
+	} else {
+		DnsData[token] = append(DnsData[token], data)
+	}
 	rw.Unlock()
 }
 
-func (d *DnsInfo) Get() string {
+func (d *DnsInfo) Get(token string) string {
 	rw.RLock()
-	v, _ := json.Marshal(DnsData)
+	res := ""
+	if DnsData[token] != nil {
+		v, _ := json.Marshal(DnsData[token])
+		res = string(v)
+	} else {
+		res = "error"
+	}
 	rw.RUnlock()
-	return string(v)
+	return res
 }
 
-func (d *DnsInfo) Clear() {
-	DnsData = (DnsData)[0:0]
+func (d *DnsInfo) Clear(token string) {
+	DnsData[token] = []DnsInfo{}
+	DnsData["other"] = []DnsInfo{}
+}
+
+func verifyToken(token string) bool {
+	tokens := strings.Split(Core.Config.HTTP.Token, ",")
+	flag := false
+	for _, v := range tokens {
+		if v == token {
+			flag = true
+		}
+	}
+	return flag
 }
