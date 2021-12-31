@@ -68,9 +68,9 @@ func serverDNS(addr *net.UDPAddr, conn *net.UDPConn, msg dnsmessage.Message) {
 	// 域名过滤，避免网络扫描
 	if strings.HasSuffix(queryNameStr[:len(queryNameStr)-1], Core.Config.Dns.Dnslog) {
 		queryDoamin := strings.Replace(queryNameStr, fmt.Sprintf(".%s.", Core.Config.Dns.Dnslog), "", 1)
-		token := strings.Split(queryDoamin, ".")[len(queryDoamin)-1]
-		if verifyToken(token) {
-			D.Set(token, DnsInfo{
+		token := strings.Split(queryDoamin, ".")
+		if verifyToken(token[len(token)-1]) {
+			D.Set(token[len(token)-1], DnsInfo{
 				Subdomain: queryNameStr[:len(queryNameStr)-1],
 				Ipaddress: addr.IP.String(),
 				Time:      time.Now().Unix(),
