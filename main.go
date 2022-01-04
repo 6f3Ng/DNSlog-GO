@@ -5,9 +5,10 @@ import (
 	"DnsLog/Dns"
 	"DnsLog/Http"
 
-	"gopkg.in/gcfg.v1"
 	"log"
 	"strings"
+
+	"gopkg.in/gcfg.v1"
 )
 
 //GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-w -s" main.go

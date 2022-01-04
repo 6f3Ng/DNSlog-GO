@@ -26,6 +26,7 @@ func VerifyToken(token string) bool {
 	for v := range User {
 		if v == token {
 			flag = true
+			break
 		}
 	}
 	return flag
