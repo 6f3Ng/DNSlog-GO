@@ -16,7 +16,7 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
-var DnsData map[string][]DnsInfo
+var DnsData = make(map[string][]DnsInfo)
 
 var rw sync.RWMutex
 
@@ -57,35 +57,27 @@ func serverDNS(addr *net.UDPAddr, conn *net.UDPConn, msg dnsmessage.Message) {
 	}
 	question := msg.Questions[0]
 	var (
-		// queryTypeStr = question.Type.String()
 		queryNameStr = question.Name.String()
 		queryType    = question.Type
 		queryName, _ = dnsmessage.NewName(queryNameStr)
 		resource     dnsmessage.Resource
+		queryDoamin  = strings.Replace(queryNameStr, fmt.Sprintf(".%s.", Core.Config.Dns.Dnslog), "", 1)
 	)
 	var resIp [4]byte
 	// fmt.Println(queryNameStr[:len(queryNameStr)-1], " ", Core.Config.Dns.Xip)
 	// 域名过滤，避免网络扫描
 	if strings.HasSuffix(queryNameStr[:len(queryNameStr)-1], Core.Config.Dns.Dnslog) {
-		queryDoamin := strings.Replace(queryNameStr, fmt.Sprintf(".%s.", Core.Config.Dns.Dnslog), "", 1)
 		token := strings.Split(queryDoamin, ".")
-		if verifyToken(token[len(token)-1]) {
-			D.Set(token[len(token)-1], DnsInfo{
-				Subdomain: queryNameStr[:len(queryNameStr)-1],
-				Ipaddress: addr.IP.String(),
-				Time:      time.Now().Unix(),
-			})
-		} else {
-			D.Set("other", DnsInfo{
-				Subdomain: queryNameStr[:len(queryNameStr)-1],
-				Ipaddress: addr.IP.String(),
-				Time:      time.Now().Unix(),
-			})
-		}
+		user := Core.GetUser(token[len(token)-1])
+		D.Set(user, DnsInfo{
+			Subdomain: queryNameStr[:len(queryNameStr)-1],
+			Ipaddress: addr.IP.String(),
+			Time:      time.Now().Unix(),
+		})
 		resIp = [4]byte{127, 0, 0, 1}
 	} else if strings.HasSuffix(queryNameStr[:len(queryNameStr)-1], Core.Config.Dns.Xip) {
 		// xip解析
-		queryDoamin := strings.Replace(queryNameStr, fmt.Sprintf(".%s.", Core.Config.Dns.Dnslog), "", 1)
+		// queryDoamin := strings.Replace(queryNameStr, fmt.Sprintf(".%s.", Core.Config.Dns.Dnslog), "", 1)
 		reg := regexp.MustCompile(`((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})(\.((2(5[0-5]|[0-4]\d))|[0-1]?\d{1,2})){3}`)
 		if reg == nil {
 			return
@@ -168,8 +160,9 @@ func (d *DnsInfo) Get(token string) string {
 	if DnsData[token] != nil {
 		v, _ := json.Marshal(DnsData[token])
 		res = string(v)
-	} else {
-		res = "error"
+	}
+	if res == "" {
+		res = "null"
 	}
 	rw.RUnlock()
 	return res
@@ -178,15 +171,4 @@ func (d *DnsInfo) Get(token string) string {
 func (d *DnsInfo) Clear(token string) {
 	DnsData[token] = []DnsInfo{}
 	DnsData["other"] = []DnsInfo{}
-}
-
-func verifyToken(token string) bool {
-	tokens := strings.Split(Core.Config.HTTP.Token, ",")
-	flag := false
-	for _, v := range tokens {
-		if v == token {
-			flag = true
-		}
-	}
-	return flag
 }
